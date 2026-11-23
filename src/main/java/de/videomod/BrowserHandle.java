@@ -1,65 +1,104 @@
 package de.videomod;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.blaze3d.textures.GpuSampler;
 import net.dimaskama.mcef.api.MCEFApi;
 import net.dimaskama.mcef.api.MCEFBrowser;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
 
 import java.net.URI;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class BrowserHandle {
     private static MCEFBrowser browser;
     private static int lastW = -1, lastH = -1;
+    private static String pendingUrl;
+    private static boolean initTried;
+    private static GpuSampler sampler;
 
     private BrowserHandle() {}
 
-    /** MCEF-API: ist Chromium fertig initialisiert? (läuft asynchron, 1. Start lädt Chromium herunter) */
+    /** Ist Chromium fertig geladen? (1. Start: Download, dauert) */
     public static boolean ready() {
-        return MCEFApi.isInitialized();
+        try {
+            CompletableFuture<MCEFApi> f = MCEFApi.getInstanceFuture();
+            return f.isDone() && !f.isCompletedExceptionally();
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     public static boolean hasBrowser() { return browser != null; }
 
     public static void load(String input) {
         String url = normalize(input);
-        if (url == null || !ready()) return;
-        if (browser == null) {
-            // MCEF-API: Browser erzeugen (url, transparent)
-            browser = MCEFApi.createBrowser(url, false);
-            lastW = lastH = -1;
-        } else {
-            browser.loadURL(url);               // MCEF-API
+        if (url == null) return;
+        if (!ready()) {
+            // Chromium laedt noch: URL merken, wird automatisch gestartet sobald fertig
+            pendingUrl = url;
+            if (!initTried) {
+                initTried = true;
+                try { MCEFApi.initialize(); } catch (Throwable ignored) {}
+            }
+            return;
+        }
+        open(url);
+    }
+
+    private static void open(String url) {
+        try {
+            if (browser == null) {
+                browser = MCEFApi.getInstance().createBrowser(url, false);
+                browser.setFocus(true);
+                lastW = lastH = -1;
+            } else {
+                browser.getCefBrowser().loadURL(url);
+            }
+        } catch (Throwable t) {
+            t.printStackTrace();
         }
     }
 
     public static void close() {
-        if (browser != null) { browser.close(); browser = null; }   // MCEF-API
+        if (browser != null) { browser.close(); browser = null; }
     }
 
-    /** Zeichnet das Video an x,y mit Größe w,h. */
+    /** Zeichnet das Video an x,y mit Groesse w,h. */
     public static void draw(GuiGraphicsExtractor g, int x, int y, int w, int h) {
+        if (pendingUrl != null && ready()) {
+            String u = pendingUrl;
+            pendingUrl = null;
+            open(u);
+        }
         if (browser == null) return;
         if (w != lastW || h != lastH) {
-            browser.resize(w, h);               // MCEF-API: Browsergröße = Fenstergröße
+            browser.resize(w, h);
             lastW = w; lastH = h;
         }
-        // MCEF-API: Textur des Browsers zeichnen (im Testmod nachsehen, wie sie geblittet wird)
-        g.blit(browser.getTextureView(), x, y, x + w, y + h, 0f, 1f, 0f, 1f);
+        if (sampler == null) {
+            sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
+        }
+        g.blit(browser.getTextureView(), sampler, x, y, x + w, y + h, 0f, 1f, 0f, 1f);
     }
 
     public static void mouse(double bx, double by, int button, boolean down) {
         if (browser == null) return;
-        browser.sendMouseMove((int) bx, (int) by);                 // MCEF-API
-        if (down) browser.sendMousePress((int) bx, (int) by, button);
-        else browser.sendMouseRelease((int) bx, (int) by, button);
+        browser.onMouseMoved((int) bx, (int) by);
+        MouseButtonEvent ev = new MouseButtonEvent(bx, by, new MouseButtonInfo(button, 0));
+        if (down) browser.onMouseClicked(ev, false);
+        else browser.onMouseReleased(ev);
     }
 
     public static void scroll(double bx, double by, double delta) {
-        if (browser != null) browser.sendMouseWheel((int) bx, (int) by, delta);  // MCEF-API
+        if (browser != null) browser.onMouseScrolled((int) bx, (int) by, delta);
     }
 
-    /** YouTube-Links -> Embed-Player (ohne Drumherum, mit Autoplay). Rest: unverändert. */
+    /** YouTube-Links -> Embed-Player (mit Autoplay). Rest: unveraendert. */
     static String normalize(String in) {
         if (in == null) return null;
         String s = in.trim();
@@ -68,7 +107,7 @@ public final class BrowserHandle {
         try {
             URI u = URI.create(s);
             String scheme = u.getScheme();
-            if (!"http".equals(scheme) && !"https".equals(scheme)) return null;  // nur http(s)
+            if (!"http".equals(scheme) && !"https".equals(scheme)) return null;
         } catch (Exception e) { return null; }
         Matcher m = Pattern.compile("(?:youtu\\.be/|youtube\\.com/(?:watch\\?(?:.*&)?v=|live/|shorts/))([\\w-]{11})").matcher(s);
         if (m.find()) return "https://www.youtube.com/embed/" + m.group(1) + "?autoplay=1";
