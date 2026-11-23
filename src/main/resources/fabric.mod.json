@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "videomod",
+  "version": "${version}",
+  "name": "Video Window",
+  "description": "Ein verschiebbares Videofenster in Minecraft (YouTube/Stream-Link).",
+  "environment": "client",
+  "entrypoints": { "client": ["de.videomod.VideoModClient"] },
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "~26.1",
+    "java": ">=25"
+  }
+}
