@@ -12,13 +12,20 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class BrowserHandle {
+    // Interne Aufloesung des Browsers. YouTube waehlt danach die Qualitaet (1920x1080 = 1080p).
+    // Wenn es ruckelt: auf 1280 / 720 senken.
+    private static final int BW = 1920, BH = 1080;
+
     private static MCEFBrowser browser;
     private static int lastW = -1, lastH = -1;
+    private static int dispW = 320, dispH = 180;
     private static String pendingUrl;
     private static boolean initTried;
     private static GpuSampler sampler;
@@ -75,60 +82,13 @@ public final class BrowserHandle {
             open(u);
         }
         if (browser == null) return;
-        if (w != lastW || h != lastH) {
-            browser.resize(w, h);
-            lastW = w; lastH = h;
+        dispW = w;
+        dispH = h;
+        if (lastW != BW || lastH != BH) {
+            browser.resize(BW, BH);
+            lastW = BW; lastH = BH;
         }
         if (sampler == null) {
             sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
         }
-        g.blit(browser.getTextureView(), sampler, x, y, x + w, y + h, 0f, 1f, 0f, 1f);
-    }
-
-    public static void setFocus(boolean f) {
-        if (browser != null) browser.setFocus(f);
-    }
-
-    public static void mouseMove(double bx, double by) {
-        if (browser != null) browser.onMouseMoved((int) bx, (int) by);
-    }
-
-    public static void mouse(double bx, double by, int button, boolean down) {
-        if (browser == null) return;
-        browser.onMouseMoved((int) bx, (int) by);
-        MouseButtonEvent ev = new MouseButtonEvent(bx, by, new MouseButtonInfo(button, 0));
-        if (down) browser.onMouseClicked(ev, false);
-        else browser.onMouseReleased(ev);
-    }
-
-    public static void scroll(double bx, double by, double delta) {
-        if (browser != null) browser.onMouseScrolled((int) bx, (int) by, delta);
-    }
-
-    public static void keyDown(KeyEvent e) {
-        if (browser != null) browser.onKeyPressed(e);
-    }
-
-    public static void keyUp(KeyEvent e) {
-        if (browser != null) browser.onKeyReleased(e);
-    }
-
-    public static void typed(CharacterEvent e) {
-        if (browser != null) browser.onCharTyped(e);
-    }
-
-    static String normalize(String in) {
-        if (in == null) return null;
-        String s = in.trim();
-        if (s.isEmpty()) return null;
-        if (!s.matches("^[a-zA-Z][a-zA-Z0-9+.-]*://.*")) s = "https://" + s;
-        try {
-            URI u = URI.create(s);
-            String scheme = u.getScheme();
-            if (!"http".equals(scheme) && !"https".equals(scheme)) return null;
-        } catch (Exception e) { return null; }
-        Matcher m = Pattern.compile("(?:youtu\\.be/|youtube\\.com/(?:watch\\?(?:.*&)?v=|live/|shorts/))([\\w-]{11})").matcher(s);
-        if (m.find()) return "https://www.youtube.com/embed/" + m.group(1) + "?autoplay=1";
-        return s;
-    }
-}
+        g.blit(browser.getTextureView
