@@ -91,4 +91,69 @@ public final class BrowserHandle {
         if (sampler == null) {
             sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
         }
-        g.blit(browser.getTextureView
+        g.blit(browser.getTextureView(), sampler, x, y, x + w, y + h, 0f, 1f, 0f, 1f);
+    }
+
+    private static int sx(double bx) { return (int) (bx * BW / Math.max(1, dispW)); }
+    private static int sy(double by) { return (int) (by * BH / Math.max(1, dispH)); }
+
+    public static void setFocus(boolean f) {
+        if (browser != null) browser.setFocus(f);
+    }
+
+    public static void mouseMove(double bx, double by) {
+        if (browser != null) browser.onMouseMoved(sx(bx), sy(by));
+    }
+
+    public static void mouse(double bx, double by, int button, boolean down) {
+        if (browser == null) return;
+        int px = sx(bx), py = sy(by);
+        browser.onMouseMoved(px, py);
+        MouseButtonEvent ev = new MouseButtonEvent(px, py, new MouseButtonInfo(button, 0));
+        if (down) browser.onMouseClicked(ev, false);
+        else browser.onMouseReleased(ev);
+    }
+
+    public static void scroll(double bx, double by, double delta) {
+        if (browser != null) browser.onMouseScrolled(sx(bx), sy(by), delta);
+    }
+
+    public static void keyDown(KeyEvent e) {
+        if (browser != null) browser.onKeyPressed(e);
+    }
+
+    public static void keyUp(KeyEvent e) {
+        if (browser != null) browser.onKeyReleased(e);
+    }
+
+    public static void typed(CharacterEvent e) {
+        if (browser != null) browser.onCharTyped(e);
+    }
+
+    /**
+     * - Suchbegriff (kein Punkt oder mit Leerzeichen) -> YouTube-Suche
+     * - YouTube-Link -> normale Videoseite (der Embed-Player gibt Fehler)
+     * - sonst: Adresse unveraendert
+     */
+    static String normalize(String in) {
+        if (in == null) return null;
+        String s = in.trim();
+        if (s.isEmpty()) return null;
+
+        if (!s.contains("://") && (s.contains(" ") || !s.contains("."))) {
+            return "https://www.youtube.com/results?search_query="
+                    + URLEncoder.encode(s, StandardCharsets.UTF_8);
+        }
+
+        if (!s.matches("^[a-zA-Z][a-zA-Z0-9+.-]*://.*")) s = "https://" + s;
+        try {
+            URI u = URI.create(s);
+            String scheme = u.getScheme();
+            if (!"http".equals(scheme) && !"https".equals(scheme)) return null;
+        } catch (Exception e) { return null; }
+
+        Matcher m = Pattern.compile("(?:youtu\\.be/|youtube\\.com/(?:watch\\?(?:.*&)?v=|live/|shorts/|embed/))([\\w-]{11})").matcher(s);
+        if (m.find()) return "https://www.youtube.com/watch?v=" + m.group(1);
+        return s;
+    }
+}
