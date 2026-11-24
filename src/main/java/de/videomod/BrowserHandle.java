@@ -52,13 +52,13 @@ public final class BrowserHandle {
 
     private static void open(String url) {
         try {
-            if (browser == null) {
-                browser = MCEFApi.getInstance().createBrowser(url, false);
-                browser.setFocus(true);
-                lastW = lastH = -1;
-            } else {
-                browser.getCefBrowser().loadURL(url);
+            if (browser != null) {
+                browser.close();
+                browser = null;
             }
+            browser = MCEFApi.getInstance().createBrowser(url, false);
+            browser.setFocus(true);
+            lastW = lastH = -1;
         } catch (Throwable t) {
             t.printStackTrace();
         }
