@@ -6,6 +6,8 @@ import com.mojang.blaze3d.textures.GpuSampler;
 import net.dimaskama.mcef.api.MCEFApi;
 import net.dimaskama.mcef.api.MCEFBrowser;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
 
@@ -23,7 +25,6 @@ public final class BrowserHandle {
 
     private BrowserHandle() {}
 
-    /** Ist Chromium fertig geladen? (1. Start: Download, dauert) */
     public static boolean ready() {
         try {
             CompletableFuture<MCEFApi> f = MCEFApi.getInstanceFuture();
@@ -39,7 +40,6 @@ public final class BrowserHandle {
         String url = normalize(input);
         if (url == null) return;
         if (!ready()) {
-            // Chromium laedt noch: URL merken, wird automatisch gestartet sobald fertig
             pendingUrl = url;
             if (!initTried) {
                 initTried = true;
@@ -68,7 +68,6 @@ public final class BrowserHandle {
         if (browser != null) { browser.close(); browser = null; }
     }
 
-    /** Zeichnet das Video an x,y mit Groesse w,h. */
     public static void draw(GuiGraphicsExtractor g, int x, int y, int w, int h) {
         if (pendingUrl != null && ready()) {
             String u = pendingUrl;
@@ -86,6 +85,14 @@ public final class BrowserHandle {
         g.blit(browser.getTextureView(), sampler, x, y, x + w, y + h, 0f, 1f, 0f, 1f);
     }
 
+    public static void setFocus(boolean f) {
+        if (browser != null) browser.setFocus(f);
+    }
+
+    public static void mouseMove(double bx, double by) {
+        if (browser != null) browser.onMouseMoved((int) bx, (int) by);
+    }
+
     public static void mouse(double bx, double by, int button, boolean down) {
         if (browser == null) return;
         browser.onMouseMoved((int) bx, (int) by);
@@ -98,7 +105,18 @@ public final class BrowserHandle {
         if (browser != null) browser.onMouseScrolled((int) bx, (int) by, delta);
     }
 
-    /** YouTube-Links -> Embed-Player (mit Autoplay). Rest: unveraendert. */
+    public static void keyDown(KeyEvent e) {
+        if (browser != null) browser.onKeyPressed(e);
+    }
+
+    public static void keyUp(KeyEvent e) {
+        if (browser != null) browser.onKeyReleased(e);
+    }
+
+    public static void typed(CharacterEvent e) {
+        if (browser != null) browser.onCharTyped(e);
+    }
+
     static String normalize(String in) {
         if (in == null) return null;
         String s = in.trim();
